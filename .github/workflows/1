@@ -1,3 +1,0 @@
-mkdir -p .github
-# 把前面给出的完整 Makefile 内容复制进去
-nano .github/cups-Makefile
