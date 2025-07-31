@@ -38,17 +38,15 @@ jobs:
     - name: Generate .config for target + packages
       run: |
         cd openwrt
-        cat >> .config <<EOF
-CONFIG_TARGET_ath79=y
-CONFIG_TARGET_ath79_nand=y
-CONFIG_TARGET_ath79_nand_DEVICE_wndr4300=y
-CONFIG_PACKAGE_cups=y
-CONFIG_PACKAGE_cups-filters=y
-CONFIG_PACKAGE_avahi-daemon=y
-CONFIG_PACKAGE_libgnutls=y
-CONFIG_PACKAGE_libavahi=y
-CONFIG_PACKAGE_libusb-1.0=y
-EOF
+        echo "CONFIG_TARGET_ath79=y" >> .config
+        echo "CONFIG_TARGET_ath79_nand=y" >> .config
+        echo "CONFIG_TARGET_ath79_nand_DEVICE_wndr4300=y" >> .config
+        echo "CONFIG_PACKAGE_cups=y" >> .config
+        echo "CONFIG_PACKAGE_cups-filters=y" >> .config
+        echo "CONFIG_PACKAGE_avahi-daemon=y" >> .config
+        echo "CONFIG_PACKAGE_libgnutls=y" >> .config
+        echo "CONFIG_PACKAGE_libavahi=y" >> .config
+        echo "CONFIG_PACKAGE_libusb-1.0=y" >> .config
         make defconfig
 
     - name: Download sources
