@@ -1,0 +1,54 @@
+name: Build CUPS IPK for WNDR4300
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Lean source
+        uses: actions/checkout@v4
+        with:
+          repository: coolsnowwolf/lede
+          ref: R22.2.2
+
+      - name: Install dependencies
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential libncurses5-dev gawk git subversion libssl-dev gettext unzip zlib1g-dev file wget
+
+      - name: Add CUPS feed
+        run: |
+          echo "src-git cups https://github.com/adlerweb/lede-cups.git" >> feeds.conf.default
+
+      - name: Update feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Configure target
+        run: |
+          echo "CONFIG_TARGET_ath79=y" > .config
+          echo "CONFIG_TARGET_ath79_generic=y" >> .config
+          echo "CONFIG_TARGET_ath79_generic_DEVICE_netgear_wndr4300=y" >> .config
+          echo "CONFIG_PACKAGE_cups=y" >> .config
+          echo "CONFIG_PACKAGE_cups-filters=y" >> .config
+          echo "CONFIG_PACKAGE_avahi-daemon=y" >> .config
+          echo "CONFIG_PACKAGE_libgnutls=y" >> .config
+          echo "CONFIG_PACKAGE_libusb-1.0=y" >> .config
+          make defconfig
+
+      - name: Compile packages
+        run: |
+          make download -j$(nproc)
+          make package/cups/compile -j$(nproc)
+          make package/cups-filters/compile -j$(nproc)
+          make package/avahi/compile -j$(nproc)
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cups-ipk-wndr4300
+          path: |
+            bin/packages/mips_24kc/packages/*.ipk
