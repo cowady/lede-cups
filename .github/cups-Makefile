@@ -1,3 +1,0 @@
-git add .github/cups-Makefile
-git commit -m "add standalone cups 2.3.6 Makefile"
-git push
