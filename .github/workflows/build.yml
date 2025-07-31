@@ -34,8 +34,7 @@ jobs:
         run: |
           cd sdk/package
           mkdir -p cups
-          cd cups
-          cat > Makefile <<'EOF'
+          cat > cups/Makefile <<'EOF'
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=cups
