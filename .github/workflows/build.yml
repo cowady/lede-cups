@@ -1,25 +1,24 @@
 # .github/workflows/build-cups.yml
-name: Build CUPS with AirPrint for OpenWrt (ath79/nand)
+name: Build CUPS 2.3.6 with AirPrint for OpenWrt (ath79/nand)
 
 on:
-  workflow_dispatch:      # 允许手动触发
+  workflow_dispatch:
   push:
     branches: [ main ]
 
 env:
+  CUPS_VERSION: 2.3.6
   OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/23.05.3/targets/ath79/nand/openwrt-sdk-23.05.3-ath79-nand_gcc-12.3.0_musl.Linux-x86_64.tar.xz
-  FEEDS_CUPS_URL: https://github.com/TheMMcOfficial/lede-cups.git
-  FEEDS_CONF: feeds.conf.default
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install build dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses5-dev gawk git subversion \
@@ -30,29 +29,82 @@ jobs:
           wget -q $OPENWRT_SDK_URL -O sdk.tar.xz
           tar -xf sdk.tar.xz
           mv openwrt-sdk* sdk
-          cd sdk
-          echo "src-git cups $FEEDS_CUPS_URL" >> $FEEDS_CONF
-          ./scripts/feeds update -a
-          ./scripts/feeds install -a
 
-      - name: Configure & build cups
+      - name: Create custom cups package directory
+        run: |
+          cd sdk/package
+          mkdir -p cups
+          cd cups
+          cat > Makefile <<'EOF'
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=cups
+PKG_VERSION:=2.3.6
+PKG_RELEASE:=1
+
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION)-source.tar.gz
+PKG_SOURCE_URL:=https://github.com/apple/cups/releases/download/v$(PKG_VERSION)/
+PKG_HASH:=skip
+
+PKG_BUILD_DEPENDS:=libusb1 zlib
+PKG_INSTALL:=1
+
+include $(INCLUDE_DIR)/package.mk
+
+define Package/cups
+  SECTION:=net
+  CATEGORY:=Network
+  TITLE:=CUPS 2.3.6 printing system
+  URL:=https://www.cups.org
+  DEPENDS:=+zlib +libpng +libjpeg +libusb-1.0 +libavahi +libopenssl
+endef
+
+define Package/cups/description
+  Common UNIX Printing System (CUPS) 2.3.6 with AirPrint support
+endef
+
+CONFIGURE_ARGS += \
+        --disable-systemd \
+        --with-cups-user=nobody \
+        --with-cups-group=nogroup \
+        --enable-browsing \
+        --enable-raw-printing \
+        --enable-dbus=no
+
+define Build/Configure
+        $(call Build/Configure/Default,$(CONFIGURE_ARGS))
+endef
+
+define Package/cups/install
+        $(INSTALL_DIR) $(1)/usr/sbin
+        $(INSTALL_BIN) $(PKG_BUILD_DIR)/cupsd $(1)/usr/sbin/
+        $(INSTALL_BIN) $(PKG_BUILD_DIR)/cupsfilter $(1)/usr/sbin/
+        $(INSTALL_DIR) $(1)/etc/cups
+        $(INSTALL_DATA) $(PKG_BUILD_DIR)/conf/cupsd.conf $(1)/etc/cups/
+        $(INSTALL_DIR) $(1)/usr/lib/cups/filter
+        $(INSTALL_DIR) $(1)/usr/lib/cups/backend
+        $(INSTALL_DIR) $(1)/usr/share/cups/templates
+        $(CP) $(PKG_BUILD_DIR)/templates/* $(1)/usr/share/cups/templates/
+endef
+
+$(eval $(call BuildPackage,cups))
+EOF
+
+      - name: Pull cups sources and build
         run: |
           cd sdk
-          make defconfig
-          echo 'CONFIG_PACKAGE_cups=y' >> .config
-          echo 'CONFIG_PACKAGE_cups-browsed=y' >> .config
-          echo 'CONFIG_PACKAGE_avahi-daemon=y' >> .config
-          echo 'CONFIG_PACKAGE_libcups=y' >> .config
-          make -j$(nproc) package/cups/compile
+          make package/cups/download  V=s
+          make package/cups/prepare   V=s
+          make package/cups/compile   V=s -j$(nproc)
 
       - name: Collect artifacts
         run: |
           cd sdk
           mkdir -p ../artifacts
-          find bin/packages -type f -name '*.ipk' -exec cp {} ../artifacts/ \;
+          find bin/packages -type f -name '*cups*.ipk' -exec cp {} ../artifacts/ \;
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: cups-ath79-nand-ipks
+          name: cups-2.3.6-ath79-nand-ipks
           path: artifacts/
