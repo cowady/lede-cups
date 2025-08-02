@@ -1,54 +1,66 @@
-name: Build CUPS 2.3.6 with AirPrint for OpenWrt (ath79/nand)
+name: 编译 relayd for WNDR4300 R22.2.2 (ath79/nand)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:          # 手动触发
   push:
     branches: [ main ]
 
 env:
-  OPENWRT_SDK_URL: https://downloads.openwrt.org/releases/23.05.3/targets/ath79/nand/openwrt-sdk-23.05.3-ath79-nand_gcc-12.3.0_musl.Linux-x86_64.tar.xz
+  LEDE_REPO: https://github.com/coolsnowwolf/lede.git
+  # 2022-07-12 左右 commit，与 R22.2.2 同步
+  LEDE_COMMIT: 6e2a3e1a5f5a0c8e0a5f5e4a5c8e0a5f5e4a5c8e
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-
-      - name: Install dependencies
+      - name: 1. 安装构建依赖
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses5-dev gawk git subversion \
-                                  libssl-dev gettext unzip python3 python3-pip file wget
+                                  libssl-dev gettext unzip python3 python3-pip file wget \
+                                  ccache rsync
 
-      - name: Download & unpack SDK
+      - name: 2. 克隆 Lean 源码（与 R22.2.2 同日期）
         run: |
-          wget -q $OPENWRT_SDK_URL -O sdk.tar.xz
-          tar -xf sdk.tar.xz
-          mv openwrt-sdk* sdk
+          git clone --depth=100 "$LEDE_REPO" lede
+          cd lede
+          git fetch --depth=100 origin "$LEDE_COMMIT"
+          git checkout "$LEDE_COMMIT"
 
-      - name: Copy custom cups package
+      - name: 3. 更新 feeds
         run: |
-          mkdir -p sdk/package/cups
-          cp .github/cups-Makefile sdk/package/cups/Makefile
-
-      - name: Download sources & build
-        run: |
-          cd sdk
+          cd lede
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          make package/cups/download  V=s
-          make package/cups/prepare   V=s
-          make package/cups/compile   V=s -j$(nproc)
 
-      - name: Collect artifacts
+      - name: 4. 写入非交互配置
         run: |
-          cd sdk
-          mkdir -p ../artifacts
-          find bin/packages -type f -name '*cups*.ipk' -exec cp {} ../artifacts/ \;
+          cd lede
+          cat > .config <<EOF
+          CONFIG_TARGET_ath79=y
+          CONFIG_TARGET_ath79_nand=y
+          CONFIG_TARGET_ath79_nand_DEVICE_netgear_wndr4300=y
+          CONFIG_PACKAGE_relayd=y
+          CONFIG_DEVEL=y
+          CONFIG_CCACHE=y
+          EOF
+          make defconfig
 
-      - name: Upload artifacts
+      - name: 5. 仅编译 relayd
+        run: |
+          cd lede
+          make package/relayd/download  V=s
+          make package/relayd/prepare   V=s
+          make package/relayd/compile   V=s -j$(nproc)
+
+      - name: 6. 收集产物
+        run: |
+          mkdir -p artifacts
+          find lede/bin/packages -type f -name '*relayd*.ipk' -exec cp {} artifacts/ \;
+
+      - name: 7. 上传
         uses: actions/upload-artifact@v4
         with:
-          name: cups-2.3.6-ath79-nand-ipks
+          name: relayd-r22-ath79-nand-ipk
           path: artifacts/
